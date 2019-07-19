@@ -3,18 +3,20 @@
 #define button 3
 #define hall 2
 
-unsigned long starttime;
-unsigned long stoptime;
+int starttime;
+int stoptime;
 long looptime = 0;
 
 int leds[] = {8, 9, 10, 11}; // led引脚集合
-int mode = 0;                // 设置模式， 0为初始化，1为同心圆顺序， 2为同心圆逆序，3为秒针
-int modeLen = 4;
-int btnState = 0; // 按钮初始状态为0
-int hallState = 0;
-int timer = 360; // 转一圈所需时间
-int deg = 0;
-double t = 0.0;
+int mode = 3;                // 设置模式， 0为初始化，1为同心圆顺序， 2为同心圆逆序，3为秒针
+int modeLen = 4;             // 模式长度
+int btnState = 0;            // 按钮初始状态为0
+int hallState = 0;           // 霍尔传感器状态
+int deg = 0;                 // 度数
+int numbers = 0;             // 测速圈数
+int t = 0;                   // 电机转1°所需要时间
+int hl = 0;
+int start = 0;
 
 // 项目初始化
 void setup()
@@ -23,6 +25,7 @@ void setup()
   pinMode(button, INPUT); // 设置按钮模式为输入模式
   check();                // 开机自检
   attachInterrupt(digitalPinToInterrupt(button), changeButton, CHANGE);
+  attachInterrupt(digitalPinToInterrupt(hall), changeHall, CHANGE);
   MsTimer2::set(1000, changeSecond);
   MsTimer2::start();
 }
@@ -96,23 +99,23 @@ void select(int mode)
 {
   switch (mode)
   {
+  // 初始化模式，所有LED熄灭
   case 0:
-    // 初始化模式，所有LED熄灭
     for (int i = 0; i < 4; i++)
     {
       digitalWrite(leds[i], HIGH);
     }
     break;
+  // 同心圆顺序模式
   case 1:
-    // 同心圆顺序模式
     circle(1);
     break;
+  // 同心圆逆序模式
   case 2:
-    // 同心圆逆序模式
     circle(0);
     break;
+  // 秒针模式
   case 3:
-    // 秒针模式
     second();
     break;
   default:
@@ -128,38 +131,24 @@ void select(int mode)
 void second()
 {
   digitalWrite(leds[0], LOW); // 点亮最外围的LED
-  if (!digitalRead(hall))     // 检测标志位
-  {
 
-    hallState = 1;
+  if (!digitalRead(hall)) // 检测标志位
+  {
+    hallState = 1; // 进入标志位
   }
   if (hallState == 1 && digitalRead(hall))
   {
-    if (!starttime || (starttime && stoptime))
-    {
-      starttime = millis();
-      stoptime = 0;
-    }
-    else
-    {
-      if (starttime && !stoptime)
-      {
-        stoptime = millis();
-      }
-    }
-    if (starttime && stoptime)
-    {
-      looptime = stoptime - starttime;
-      t = (looptime * 1000) / 360;
-      Serial.println(looptime);
-    }
-    // delay(300 * deg);
-    delayMicroseconds(200 * t);
-    showSecond();
-    // delay(0.9999);
-    delayMicroseconds(2 * t);
     hallState = 0;
-    hiddenSecond();
+    if (looptime)
+    {
+      for (int i = 0; i < deg; i++)
+      {
+        delayMicroseconds((looptime * 1000) / 60);
+      }
+      showSecond();
+      delayMicroseconds((looptime * 1000) / 360);
+      hiddenSecond();
+    }
   }
 }
 
@@ -176,12 +165,44 @@ void hiddenSecond()
 
 void changeSecond()
 {
-  if (deg >= 360)
+  if (mode == 3)
   {
-    deg = 0;
+    if (deg >= 60)
+    {
+      deg = 0;
+    }
+    else
+    {
+      deg += 1;
+    }
   }
   else
   {
-    deg += 6;
+    deg = 0;
+  }
+}
+
+void changeHall()
+{
+  if (!digitalRead(hall)) // 检测标志位
+  {
+    numbers++; // 圈数+1
+    if (numbers >= 200)
+    {
+      if (!starttime)
+      {
+        starttime = millis();
+        stoptime = 0;
+      }
+      else
+      {
+        if (starttime && !stoptime)
+        {
+          stoptime = millis();
+          looptime = stoptime - starttime;
+          t = looptime / 360;
+        }
+      }
+    }
   }
 }
